@@ -69,7 +69,7 @@ class MixupBertForSequenceClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, warm_up, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None,
+    def forward(self, warm_up, step=None, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None,
     head_mask=None, inputs_embeds=None, labels=None,
     output_attentions=None, output_hidden_states=None, return_dict=None):
 
@@ -94,18 +94,31 @@ class MixupBertForSequenceClassification(BertPreTrainedModel):
 
         if labels is not None:
             if self.num_labels == 1:
-                loss_fct = MSELoss()
+                loss_fct = MSELoss(reduction='none')
                 if warm_up:
                     #  We are doing regression
                     loss = loss_fct(logits.view(-1), labels.view(-1))
                 else:
                     loss_mixup = mixup_criterion(loss_fct, logits_hat.view(-1), labels_a.view(-1), labels_b.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
+                loss_fct = CrossEntropyLoss(reduction='none')
                 if warm_up:
                     loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
                 else:
                     loss_mixup = mixup_criterion(loss_fct, logits_hat.view(-1, self.num_labels), labels_a.view(-1), labels_b.view(-1))
+
+        # step에 정보가 있으면 epoch 횟수에 따라 Loss값이 높은 일부 값을 제외함
+        # step을 None으로 보냈을땐 len(loss) loss값 전체를 가지고 mean을 수행함
+        if loss is not None:
+            loss_count = len(loss) if step is None else int((len(loss) * 0.5) * (step[0] / step[1]))
+            loss_sorted, _ = torch.sort(loss)
+            loss_sorted = loss_sorted[:loss_count]
+            loss = loss_sorted.mean()
+        else:
+            loss_count = len(loss_mixup) if step is None else int((len(loss_mixup) * 0.5) * (step[0] / step[1]))
+            loss_sorted, _ = torch.sort(loss_mixup)
+            loss_sorted = loss_sorted[:loss_count]
+            loss_mixup = loss_sorted.mean()
 
         if not return_dict:
             output = (logits,) + outputs[2:]

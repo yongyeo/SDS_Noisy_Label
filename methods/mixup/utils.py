@@ -60,7 +60,11 @@ class MixupTrainer(Trainer):
         Subclass and override for custom behavior.
         """
         warm_up = True if cur_epoch < int(self.state.num_train_epochs / 2) else False
-        outputs = model(warm_up, **inputs)
+
+        # step을 None으로 보내면 기본코드, epoch 정보를 넘기면 Co-teaching
+        # step = [cur_epoch, self.state.num_train_epochs]
+        step = None
+        outputs = model(warm_up, step, **inputs)
         
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
