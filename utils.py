@@ -36,6 +36,7 @@ DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
 
 logger = logging.get_logger(__name__)
+CE = nn.CrossEntropyLoss(reduction='none')
 
 def set_seed(seed: int):
     random.seed(seed)
