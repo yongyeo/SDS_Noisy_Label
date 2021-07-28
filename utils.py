@@ -388,7 +388,7 @@ class CustomTrainer(Trainer):
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
     def get_clean(self, model, inputs):
-        with torch.no_grad:
+        with torch.no_grad():
             if self.label_smoother is not None and "labels" in inputs:
                 labels = inputs.pop("labels")
             else:
