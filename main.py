@@ -39,6 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--total_epochs', default=10, type=int, help='Number of epochs')
     parser.add_argument('--mixup', default=False, type=str2bool, help="Mixup Method")
     parser.add_argument('--label_smoothing', default=0.0, type=float, help="Label smoothing factor")
+    parser.add_argument('--p_threshold', default=0.5, type=float, help="MentorNet")
 
     p_args = parser.parse_args()
 
@@ -109,6 +110,7 @@ if __name__ == '__main__':
         warmup_ratio=p_args.wr, seed=p_args.seed, save_total_limit=1,
         logging_strategy="no", label_smoothing_factor=p_args.label_smoothing
     )
+    args.p_threshold = p_args.p_threshold
 
     if p_args.mixup:
         trainer = MixupTrainer(

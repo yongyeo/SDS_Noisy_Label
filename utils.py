@@ -12,6 +12,7 @@ from typing import Optional, Tuple
 from tqdm.auto import tqdm
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from transformers.integrations import hp_params
+from sklearn.mixture import GaussianMixture
 
 import math
 import time
@@ -103,6 +104,9 @@ class CustomTrainer(Trainer):
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
+
+        if self.args.p_threshold > 0:
+            inputs = self.get_clean(model, inputs)
 
         loss = self.compute_loss(model, inputs)
 
@@ -382,6 +386,41 @@ class CustomTrainer(Trainer):
         self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
+
+    def get_clean(self, model, inputs):
+        with torch.no_grad:
+            if self.label_smoother is not None and "labels" in inputs:
+                labels = inputs.pop("labels")
+            else:
+                labels = None
+
+                outputs = model(**inputs)
+            if self.args.past_index >=0:
+                self.past = outputs[self.args.past_index]
+
+        # outputs로 부터 logits(예측값)을 구합니다
+        logits = outputs['logits']
+
+        labels = nested_detach(tuple(inputs.get(name) for name in labels))
+
+        loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        gmm = GaussianMixture(n_components=2,max_iter=10,tol=1e-2,reg_covar=5e-4)
+        gmm.fit(loss)
+        prob = gmm.predict_proba(loss)
+        #inputs로부터 정답을 구합니다.
+
+        #각 샘플별 로스를 계산합니다
+
+        #from sklearn.mixture import GaussianMixture 를 통해 상단에서 정의하였습니다.
+        #clean과 noisy 두개의 분포를 가정하기 때문에, n_components = 2로 설정합니다.
+        #loss가 cuda tensor인 경우, numpy로 변경해줍니다.
+
+        #p_threshold를 활용해 self.self.clean inputs 만을 return 합니다.
+        clean_inputs = {}
+        for k,v in inputs.items():
+            clean_inputs[k] = v[prob > self.args.p_threshold]
+        return clean_iputs
 
     def prediction_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool,
     ignore_keys: Optional[List[str]] = None) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
