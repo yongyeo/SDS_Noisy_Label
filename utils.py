@@ -453,7 +453,7 @@ class CustomTrainer(Trainer):
         clean_inputs = {}
         for k,v in inputs.items():
             clean_inputs[k] = v[prob > self.args.p_threshold]
-        return clean_iputs
+        return clean_inputs
 
     def prediction_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool,
     ignore_keys: Optional[List[str]] = None) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
