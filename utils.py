@@ -119,7 +119,29 @@ class CustomTrainer(Trainer):
         loss.backward()
 
         return loss.detach()
-        
+
+    def get_loss(self, model, inputs):
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        with torch.no_grad():
+            if self.label_smoother is not None and "labels" in inputs:
+                labels = inputs.pop("labels")
+            else:
+                labels = None
+
+                outputs = model(**inputs)
+            if self.args.past_index >= 0:
+                self._past = outputs[self.args.past_index]
+
+            logits = outputs["logits"] if isinstance(outputs, dict) else outputs[1]
+
+            labels = inputs["labels"]
+
+            loss = CE(logits, labels).cpu().numpy().reshape(-1, 1)
+
+        return loss
+
     def train(self, resume_from_checkpoint: Optional[Union[str, bool]] = None,
     trial: Union["optuna.Trial", Dict[str, Any]] = None, ignore_keys_for_eval: Optional[List[str]] = None, **kwargs):
         """
@@ -304,6 +326,17 @@ class CustomTrainer(Trainer):
             steps_in_epoch = (len(epoch_iterator) if train_dataset_is_sized else args.max_steps * args.gradient_accumulation_steps)
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
+            all_loss = []
+            for step, inputs in enumerate(epoch_iterator):
+                loss = self.get_loss(model, inputs)
+                all_loss.append(loss)
+            all_loss = np.concatenate(all_loss, axis = 0)
+
+            #from sklearn.mixture import GaussianMixture 를 통해 상단에서 정의하였습니다.
+            #clean과 noisy 두개의 분포를 가정하기 때문에, n_components = 2로 설정
+            self.gmm = GaussianMixture(n_components=2, max_iter=10,tol=1e-2,reg_covar=5e-4)
+            self.gmm.fit(all_loss)
+
             for step, inputs in enumerate(epoch_iterator):
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
@@ -395,19 +428,18 @@ class CustomTrainer(Trainer):
                 labels = None
 
                 outputs = model(**inputs)
-            if self.args.past_index >=0:
+            if self.args.past_index >= 0:
                 self.past = outputs[self.args.past_index]
 
         # outputs로 부터 logits(예측값)을 구합니다
-        logits = outputs['logits']
+        logits = outputs["logits"] if isinstance(outputs, dict) else outputs[1]
 
-        labels = nested_detach(tuple(inputs.get(name) for name in labels))
+        labels = inputs["labels"]
 
-        loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss = CE(logits, labels).cpu().numpy().reshape(-1, 1)
 
-        gmm = GaussianMixture(n_components=2,max_iter=10,tol=1e-2,reg_covar=5e-4)
-        gmm.fit(loss)
-        prob = gmm.predict_proba(loss)
+        prob = self.gmm.predict_proba(loss)
+        prob = prob[:, self.gmm.means_.argmin()]
         #inputs로부터 정답을 구합니다.
 
         #각 샘플별 로스를 계산합니다
