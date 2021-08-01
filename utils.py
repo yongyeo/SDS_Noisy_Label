@@ -106,7 +106,7 @@ class CustomTrainer(Trainer):
         model.train()
         inputs = self._prepare_inputs(inputs)
 
-        if self.args.p_threshold > 0:
+        if self.args.p_threshold > 0 and cur_epoch > 2:
             inputs = self.get_clean(model, inputs)
 
         loss = self.compute_loss(model, inputs)
@@ -131,13 +131,14 @@ class CustomTrainer(Trainer):
             else:
                 labels = None
 
-                outputs = model(**inputs)
+            outputs = model(**inputs)
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index]
 
             logits = outputs["logits"] if isinstance(outputs, dict) else outputs[1]
 
-            labels = inputs["labels"]
+            if labels is None:
+                labels = inputs["labels"]
 
             loss = CE(logits, labels).cpu().numpy().reshape(-1, 1)
 
@@ -159,7 +160,6 @@ class CustomTrainer(Trainer):
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
-
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
@@ -424,18 +424,19 @@ class CustomTrainer(Trainer):
     def get_clean(self, model, inputs):
         with torch.no_grad():
             if self.label_smoother is not None and "labels" in inputs:
-                labels = inputs.pop("labels")
+                labels = inputs["labels"]
             else:
                 labels = None
 
-                outputs = model(**inputs)
+            outputs = model(**inputs)
             if self.args.past_index >= 0:
                 self.past = outputs[self.args.past_index]
 
         # outputs로 부터 logits(예측값)을 구합니다
         logits = outputs["logits"] if isinstance(outputs, dict) else outputs[1]
 
-        labels = inputs["labels"]
+        if labels is None:
+            labels = inputs["labels"]
 
         loss = CE(logits, labels).cpu().numpy().reshape(-1, 1)
 
