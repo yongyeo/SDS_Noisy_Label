@@ -127,7 +127,7 @@ class CustomTrainer(Trainer):
 
         with torch.no_grad():
             if self.label_smoother is not None and "labels" in inputs:
-                labels = inputs.pop("labels")
+                labels = inputs["labels"]
             else:
                 labels = None
 
